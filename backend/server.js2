@@ -1,0 +1,16 @@
+// SIMPLE TOURNAMENT SYSTEM
+let tournaments = [];
+
+app.get("/tournaments",(req,res)=>{
+  res.json(tournaments);
+});
+
+app.post("/tournament/create",(req,res)=>{
+  tournaments.push({
+    id:Date.now(),
+    name:req.body.name,
+    entry:req.body.entry || 0
+  });
+
+  res.json({success:true});
+});
