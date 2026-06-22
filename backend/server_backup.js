@@ -8,21 +8,17 @@ app.use(cors());
 app.use(express.json());
 
 /* ================= DATABASE ================= */
-mongoose.connect(
-  "mongodb+srv://fftournamentadmin:fftournament2026@fftournament.kobz3uo.mongodb.net/fftournament?retryWrites=true&w=majority&appName=FFTOURNAMENT"
-)
+mongoose.connect("mongodb+srv://fftournamentadmin:fftournament2026@fftournament.kobz3uo.mongodb.net/?appName=FFTOURNAMENT")
 .then(() => console.log("MongoDB Connected"))
 .catch(err => console.log("MongoDB Error:", err));
-mongoose.connection.once("open", () => {
-    console.log("CONNECTED DB NAME:", mongoose.connection.name);
-});
+
 /* ================= USER ================= */
 const UserSchema = new mongoose.Schema({
     username: String,
     email: String,
     password: String,
     coins: { type: Number, default: 0 },
-    role: { type: String, default: "player" }
+    role: { type: String, default: "user" }
 });
 
 const User = mongoose.model("User", UserSchema);
@@ -49,15 +45,15 @@ app.post("/signup", async (req, res) => {
         const { username, email, password } = req.body;
 
         const exist = await User.findOne({ email });
-        if (exist) return res.json({ success: false, message: "User already exists" });
+        if (exist) return res.json({ message: "User already exists" });
 
         const user = new User({ username, email, password });
         await user.save();
 
-        res.json({ success: true, message: "Signup successful" });
+        res.json({ message: "Signup successful" });
 
     } catch (err) {
-        res.status(500).json({ success: false, message: "Signup error" });
+        res.status(500).json({ message: "Signup error" });
     }
 });
 
@@ -67,16 +63,12 @@ app.post("/login", async (req, res) => {
         const { email, password } = req.body;
 
         const user = await User.findOne({ email, password });
-        if (!user) return res.json({ success: false, message: "Invalid credentials" });
+        if (!user) return res.json({ message: "Invalid credentials" });
 
-        res.json({
-            success: true,
-            message: "Login successful",
-            user
-        });
+        res.json({ message: "Login successful", user });
 
     } catch (err) {
-        res.status(500).json({ success: false, message: "Login error" });
+        res.status(500).json({ message: "Login error" });
     }
 });
 
@@ -98,10 +90,18 @@ app.post("/admin/add-coins", async (req, res) => {
     }
 });
 
-/* ================= CREATE TOURNAMENT ================= */
+/* ================= CREATE TOURNAMENT (ADMIN) ================= */
 app.post("/admin/create-tournament", async (req, res) => {
     try {
-        const t = new Tournament(req.body);
+        const { title, entryFee, prize, date } = req.body;
+
+        const t = new Tournament({
+            title,
+            entryFee,
+            prize,
+            date
+        });
+
         await t.save();
 
         res.json({ message: "Tournament created", t });
@@ -117,7 +117,7 @@ app.get("/tournaments", async (req, res) => {
     res.json(data);
 });
 
-/* ================= GET USERS ================= */
+/* ================= GET USERS (ADMIN TEST) ================= */
 app.get("/users", async (req, res) => {
     const users = await User.find();
     res.json(users);
