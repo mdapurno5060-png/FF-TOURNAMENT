@@ -94,42 +94,36 @@ res.json({message:"Server error"});
 });
 
 /* ================= LOGIN ================= */
-app.post("/login", async (req,res)=>{
-  const {email,password} = req.body;
+function login() {
 
-  console.log("LOGIN EMAIL:", email);
-  console.log("LOGIN PASSWORD:", password);
+  const email = document.getElementById("email").value.trim();
+  const password = document.getElementById("password").value.trim();
 
-  const user = await User.findOne({email});
-
-  console.log("FOUND USER:", user);
-
-  if(!user){
-    return res.json({message:"Invalid credentials"});
-  }
-
-  if(password !== user.password){
-    console.log("PASSWORD NOT MATCH");
-    return res.json({message:"Invalid credentials"});
-  }
-
-  const token = jwt.sign(
-    {
-      id:user._id,
-      role:user.role
+  fetch("https://ff-tournament-vpee.onrender.com/login", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json"
     },
-    SECRET,
-    {
-      expiresIn:"7d"
-    }
-  );
+    body: JSON.stringify({ email, password })
+  })
+  .then(res => res.json())
+  .then(data => {
 
-  res.json({
-    token: token,
-    user:user,
-    message:"Login successful"
+    if (!data.token) {
+      alert(data.message || "Login failed");
+      return;
+    }
+
+    localStorage.setItem("token", data.token);
+    localStorage.setItem("user", JSON.stringify(data.user));
+
+    window.location.href = "dashboard.html";
+  })
+  .catch(() => {
+    alert("Server error");
   });
-});
+
+}
 /* ================= TOURNAMENTS ================= */
 app.get("/tournaments", auth, async (req,res)=>{
 const data = await Tournament.find();
