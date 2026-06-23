@@ -95,32 +95,41 @@ res.json({message:"Server error"});
 
 /* ================= LOGIN ================= */
 app.post("/login", async (req,res)=>{
-const {email,password} = req.body;
+  const {email,password} = req.body;
 
-const user = await User.findOne({email});
-if(!user){
-return res.json({message:"Invalid credentials"});
-}
+  console.log("LOGIN EMAIL:", email);
+  console.log("LOGIN PASSWORD:", password);
 
-const match = await bcrypt.compare(password,user.password);
-if(!match){
-return res.json({message:"Invalid credentials"});
-}
+  const user = await User.findOne({email});
 
-const token = jwt.sign(
-{id:user._id, role:user.role},
-SECRET,
-{expiresIn:"7d"}
-);
+  console.log("FOUND USER:", user);
 
-res.json({
-  token: jwtToken,
-  user: user,
-  message: "Login successful"
+  if(!user){
+    return res.json({message:"Invalid credentials"});
+  }
 
+  if(password !== user.password){
+    console.log("PASSWORD NOT MATCH");
+    return res.json({message:"Invalid credentials"});
+  }
+
+  const token = jwt.sign(
+    {
+      id:user._id,
+      role:user.role
+    },
+    SECRET,
+    {
+      expiresIn:"7d"
+    }
+  );
+
+  res.json({
+    token: token,
+    user:user,
+    message:"Login successful"
+  });
 });
-});
-
 /* ================= TOURNAMENTS ================= */
 app.get("/tournaments", auth, async (req,res)=>{
 const data = await Tournament.find();
