@@ -1,131 +1,195 @@
 const express = require("express");
 const cors = require("cors");
 const mongoose = require("mongoose");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
 
 const app = express();
-
 app.use(cors());
 app.use(express.json());
 
-/* ================= DATABASE ================= */
+const SECRET = "FF_SECRET_2026_KEY";
+
+/* ================= DB ================= */
 mongoose.connect(
-  "mongodb+srv://fftournamentadmin:fftournament2026@fftournament.kobz3uo.mongodb.net/fftournament?retryWrites=true&w=majority&appName=FFTOURNAMENT"
-)
-.then(() => console.log("MongoDB Connected"))
-.catch(err => console.log("MongoDB Error:", err));
-mongoose.connection.once("open", () => {
-    console.log("CONNECTED DB NAME:", mongoose.connection.name);
-});
-/* ================= USER ================= */
-const UserSchema = new mongoose.Schema({
-    username: String,
-    email: String,
-    password: String,
-    coins: { type: Number, default: 0 },
-    role: { type: String, default: "player" }
+"mongodb+srv://fftournamentadmin:fftournament2026@fftournament.kobz3uo.mongodb.net/fftournament?retryWrites=true&w=majority"
+).then(()=>{
+console.log("DB Connected");
+console.log("DATABASE: fftournament");
 });
 
-const User = mongoose.model("User", UserSchema);
+/* ================= USER ================= */
+const UserSchema = new mongoose.Schema({
+username: String,
+email: {type:String, unique:true},
+password: String,
+coins: {type:Number, default:0},
+role: {type:String, default:"player"}
+});
+
+const User = mongoose.model("User",UserSchema);
 
 /* ================= TOURNAMENT ================= */
 const TournamentSchema = new mongoose.Schema({
-    title: String,
-    entryFee: Number,
-    prize: Number,
-    date: String,
-    createdAt: { type: Date, default: Date.now }
+title:String,
+entryFee:Number,
+prize:Number,
+date:String
 });
 
-const Tournament = mongoose.model("Tournament", TournamentSchema);
+const Tournament = mongoose.model("Tournament",TournamentSchema);
 
-/* ================= HOME ================= */
-app.get("/", (req, res) => {
-    res.send("FF TOURNAMENT API RUNNING");
-});
+/* ================= AUTH ================= */
+function auth(req,res,next){
+const token = req.headers.authorization;
+
+if(!token){
+return res.json({message:"No token"});
+}
+
+try{
+const data = jwt.verify(token,SECRET);
+req.user = data;
+next();
+}catch{
+return res.json({message:"Invalid token"});
+}
+}
+
+/* ================= ADMIN ================= */
+function adminOnly(req,res,next){
+if(req.user.role !== "admin"){
+return res.json({message:"Forbidden"});
+}
+next();
+}
 
 /* ================= SIGNUP ================= */
-app.post("/signup", async (req, res) => {
-    try {
-        const { username, email, password } = req.body;
+app.post("/signup", async (req,res)=>{
+try{
 
-        const exist = await User.findOne({ email });
-        if (exist) return res.json({ success: false, message: "User already exists" });
+const {username,email,password} = req.body;
 
-        const user = new User({ username, email, password });
-        await user.save();
+const exist = await User.findOne({email});
+if(exist){
+return res.json({message:"User already exists"});
+}
 
-        res.json({ success: true, message: "Signup successful" });
+const hash = await bcrypt.hash(password,10);
 
-    } catch (err) {
-        res.status(500).json({ success: false, message: "Signup error" });
-    }
+const user = new User({
+username,
+email,
+password:hash
+});
+
+await user.save();
+
+res.json({message:"Signup successful"});
+
+}catch(err){
+res.json({message:"Server error"});
+}
+
 });
 
 /* ================= LOGIN ================= */
-app.post("/login", async (req, res) => {
-    try {
-        const { email, password } = req.body;
+app.post("/login", async (req,res)=>{
+const {email,password} = req.body;
 
-        const user = await User.findOne({ email, password });
-        if (!user) return res.json({ success: false, message: "Invalid credentials" });
+const user = await User.findOne({email});
+if(!user){
+return res.json({message:"Invalid credentials"});
+}
 
-        res.json({
-            success: true,
-            message: "Login successful",
-            user
-        });
+const match = await bcrypt.compare(password,user.password);
+if(!match){
+return res.json({message:"Invalid credentials"});
+}
 
-    } catch (err) {
-        res.status(500).json({ success: false, message: "Login error" });
-    }
+const token = jwt.sign(
+{id:user._id, role:user.role},
+SECRET,
+{expiresIn:"7d"}
+);
+
+res.json({
+  token: jwtToken,
+  user: user,
+  message: "Login successful"
+
+});
+});
+
+/* ================= TOURNAMENTS ================= */
+app.get("/tournaments", auth, async (req,res)=>{
+const data = await Tournament.find();
+res.json(data);
+});
+
+/* ================= USERS ================= */
+app.get("/users", async (req,res)=>{
+const users = await User.find();
+res.json(users);
+});
+
+/* ================= COINS UPDATE ================= */
+app.post("/update-coins", auth, async (req,res)=>{
+let {email,coins} = req.body;
+
+coins = Number(coins);
+if(isNaN(coins)){
+return res.json({message:"Deposit coins"});
+}
+
+const user = await User.findOne({email});
+if(!user){
+return res.json({message:"User not found"});
+}
+
+user.coins += coins;
+if(user.coins < 0) user.coins = 0;
+
+await user.save();
+
+res.json({
+message:"Coins updated",
+coins:user.coins
+});
 });
 
 /* ================= ADMIN ADD COINS ================= */
-app.post("/admin/add-coins", async (req, res) => {
-    try {
-        const { email, coins } = req.body;
+app.post("/admin/add-coins", auth, adminOnly, async (req,res)=>{
+let {email,coins} = req.body;
 
-        const user = await User.findOne({ email });
-        if (!user) return res.json({ message: "User not found" });
+coins = Number(coins);
 
-        user.coins += coins;
-        await user.save();
+const user = await User.findOne({email});
+if(!user){
+return res.json({message:"User not found"});
+}
 
-        res.json({ message: "Coins added", user });
+user.coins += coins;
+await user.save();
 
-    } catch (err) {
-        res.status(500).json({ message: "Coin error" });
-    }
+res.json({message:"Coins added"});
 });
 
-/* ================= CREATE TOURNAMENT ================= */
-app.post("/admin/create-tournament", async (req, res) => {
-    try {
-        const t = new Tournament(req.body);
-        await t.save();
-
-        res.json({ message: "Tournament created", t });
-
-    } catch (err) {
-        res.status(500).json({ message: "Tournament error" });
-    }
+/* ================= ADMIN CREATE TOURNAMENT ================= */
+app.post("/admin/create-tournament", auth, adminOnly, async (req,res)=>{
+const t = new Tournament({
+title:req.body.title,
+entryFee:Number(req.body.entryFee),
+prize:Number(req.body.prize),
+date:req.body.date
 });
 
-/* ================= GET TOURNAMENTS ================= */
-app.get("/tournaments", async (req, res) => {
-    const data = await Tournament.find();
-    res.json(data);
-});
+await t.save();
 
-/* ================= GET USERS ================= */
-app.get("/users", async (req, res) => {
-    const users = await User.find();
-    res.json(users);
+res.json({message:"Tournament created"});
 });
 
 /* ================= SERVER ================= */
-const PORT = process.env.PORT || 5000;
-
-app.listen(PORT, () => {
-    console.log("Server running on", PORT);
+app.listen(5000, ()=>{
+console.log("Server running on 5000");
 });
